@@ -9,7 +9,8 @@ Por dentro é um **navegador próprio**: janela, abas, barra de endereço e pain
 WinForms com a engine **WebView2**. O `3D Browser Pro.exe` **é** o navegador — não abre o Brave, o
 Chrome nem o Edge, e não depende de outro navegador instalado. O mesmo hook de captura também
 existe como extensão Manifest V3, para quem preferir usá-lo em um Chrome/Edge/Brave comum.
-
+Criador por Galber Bynario  facebook.com/gmtiranosconquer
+Instagram: instagram.com/sansland.mmorpg
 ---
 
 ## Baixar pronto (ZIP com o `.exe`)
