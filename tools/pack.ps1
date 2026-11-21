@@ -22,8 +22,10 @@ function Write-Package([string]$Name, [string]$Prefix, [string]$Base, [string[]]
                 [void][IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, $file.FullName, ($Prefix + $entryName), 'Optimal')
             }
             if ($Prefix) {
-                [void][IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
-                    $zip, (Join-Path $root 'README.md'), ($Prefix + 'README.md'), 'Optimal')
+                foreach ($doc in @('README.md', 'CHANGELOG.md')) {
+                    [void][IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
+                        $zip, (Join-Path $root $doc), ($Prefix + $doc), 'Optimal')
+                }
             }
         } finally {
             $zip.Dispose()

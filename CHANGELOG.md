@@ -9,6 +9,6 @@
 
 ### Verificação
 
-O teste do pacote portátil no Windows cobre captura via `fetch`, download iniciado pela página, abertura de GLB texturizado no WebView2, reempacotamento para glTF, exportação OBJ/STL/PLY/FBX, rig em GLB e recusa de entrada truncada ou saída existente. O ZIP da extensão tem manifesto e sintaxe JavaScript verificados.
+O teste do pacote portátil no Windows cobre captura via `fetch`, download iniciado pela página, abertura de GLB texturizado no WebView2, reempacotamento para glTF, exportação OBJ/STL/PLY/FBX, rig em GLB e recusa de entrada truncada ou saída existente. O Blender 5.2.1 abriu o GLB original com a textura embutida e o derivado com a armadura gerada. O ZIP da extensão tem manifesto e sintaxe JavaScript verificados. A instalação da extensão em um perfil Chromium e a compatibilidade com páginas específicas como o Creator Hub do Tripo ainda precisam de validação.
 
 O modelo de teste [BoxTextured](https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/BoxTextured) é © 2017 Cesium, sob [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). O arquivo está sem alterações. Veja a atribuição do logotipo na página original.

@@ -4,5 +4,5 @@
 *.glb binary
 *.dll binary
 *.wasm binary
-native/ui/vendor/** -text -whitespace
+native/ui/vendor/** -text -whitespace linguist-vendored
 native/vendor/*.txt -whitespace
