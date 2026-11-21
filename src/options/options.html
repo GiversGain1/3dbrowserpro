@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>3D Browser Pro — Configurações</title>
+  <link rel="icon" href="../../assets/icon32.png">
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <header class="head">
+    <img class="logo" src="../../assets/icon48.png" alt="3D Browser Pro">
+    <div class="titles">
+      <h1>3D Browser Pro</h1>
+      <p>Configurações de captura e download</p>
+    </div>
+    <span id="saved" class="saved">—</span>
+  </header>
+
+  <main>
+    <section class="card">
+      <h2>Downloads</h2>
+      <label class="field">
+        <span>Pasta de destino</span>
+        <input id="folder" type="text" spellcheck="false" placeholder="3D Browser Pro">
+      </label>
+      <p class="note">Uma subpasta dentro de <strong>Downloads</strong>. O site de origem vira uma subpasta
+        (ex.: <code>3D Browser Pro/tripo3d.ai/modelo.glb</code>).</p>
+      <div class="row">
+        <button id="open-folder" class="btn">Abrir pasta de downloads</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Formatos capturados</h2>
+      <p class="note">Só os formatos marcados aparecem no painel e são guardados na memória.</p>
+      <div id="formats" class="chips"></div>
+    </section>
+
+    <section class="card">
+      <h2>Baixar automaticamente</h2>
+      <p class="note">Salva o arquivo assim que ele aparecer na rede, sem passar pelo painel.
+        Em sites com muitos arquivos isso pode gerar vários downloads de uma vez.</p>
+      <div id="auto-formats" class="chips"></div>
+    </section>
+
+    <section class="card">
+      <h2>Limites</h2>
+      <div class="grid">
+        <label class="field">
+          <span>Tamanho máximo por arquivo (MB)</span>
+          <input id="max-file" type="number" min="8" max="1024" step="8">
+        </label>
+        <label class="field">
+          <span>Memória por aba (MB)</span>
+          <input id="max-tab" type="number" min="16" max="2048" step="16">
+        </label>
+      </div>
+      <p class="note">Acima do limite o arquivo não é guardado na memória — o download pela lista de rede continua disponível.</p>
+    </section>
+
+    <section class="card">
+      <h2>Interface</h2>
+      <label class="switch">
+        <input id="badge" type="checkbox">
+        <span>Mostrar contador de capturas no ícone</span>
+      </label>
+      <label class="switch">
+        <input id="keep" type="checkbox">
+        <span>Manter capturas ao navegar para outra página</span>
+      </label>
+    </section>
+
+    <section class="card">
+      <h2>Manutenção</h2>
+      <div class="row">
+        <button id="reset" class="btn">Restaurar padrões</button>
+        <button id="clear-all" class="btn danger">Limpar capturas de todas as abas</button>
+      </div>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <span>Sem servidores e sem telemetria — tudo fica no seu navegador.</span>
+    <span class="ver">v1.1.0</span>
+  </footer>
+
+  <script src="../lib/formats.js"></script>
+  <script src="../lib/settings.js"></script>
+  <script src="options.js"></script>
+</body>
+</html>

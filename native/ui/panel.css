@@ -1,0 +1,198 @@
+:root {
+  --bg: #0b0b13;
+  --panel: rgba(255, 255, 255, 0.04);
+  --line: rgba(255, 255, 255, 0.09);
+  --text: #eef2ff;
+  --muted: #8b93b0;
+  --accent: #7c3aed;
+  --cyan: #22d3ee;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  background: radial-gradient(70% 40% at 0% 0%, rgba(124, 58, 237, 0.20), transparent 65%), var(--bg);
+  color: var(--text);
+  font: 13px/1.5 "Segoe UI", system-ui, sans-serif;
+  overflow: hidden;
+}
+.top {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.top img { width: 26px; height: 26px; border-radius: 7px; }
+.titles { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.titles strong { font-size: 13px; }
+.titles span { font-size: 11px; color: var(--muted); }
+.icon {
+  width: 26px; height: 26px;
+  border-radius: 7px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+}
+.icon:hover { color: #fff; background: rgba(255, 255, 255, 0.08); }
+.bar { padding: 9px 12px 4px; }
+input[type="search"] {
+  width: 100%;
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: rgba(0, 0, 0, 0.35);
+  color: var(--text);
+  font: inherit;
+  outline: none;
+}
+input[type="search"]:focus { border-color: rgba(124, 58, 237, 0.7); }
+.chips { display: flex; flex-wrap: wrap; gap: 5px; padding: 7px 12px 3px; }
+.chip {
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  font: 11px/1.6 "Segoe UI", sans-serif;
+  cursor: pointer;
+}
+.chip.on { background: rgba(124, 58, 237, 0.28); border-color: rgba(124, 58, 237, 0.7); color: #fff; }
+.scene {
+  margin: 7px 12px;
+  padding: 8px 10px;
+  border-radius: 9px;
+  border: 1px dashed var(--line);
+  color: var(--muted);
+  font-size: 11.5px;
+}
+.scene.on { border-style: solid; border-color: rgba(34, 211, 238, 0.45); color: #cffafe; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 12px 8px; }
+.btn {
+  height: 28px;
+  padding: 0 11px;
+  border-radius: 8px;
+  border: 1px solid rgba(124, 58, 237, 0.55);
+  background: rgba(124, 58, 237, 0.22);
+  color: #fff;
+  font: 12px/1 "Segoe UI", sans-serif;
+  cursor: pointer;
+}
+.btn:hover { background: rgba(124, 58, 237, 0.38); }
+.btn.ghost { background: transparent; border-color: var(--line); color: var(--muted); }
+.btn.ghost:hover { color: #fff; border-color: rgba(255, 255, 255, 0.3); }
+.btn:disabled { opacity: 0.4; cursor: default; }
+/* opção marcável: holograma do esqueleto na prévia */
+.chk {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font: 11.5px/1 "Segoe UI", sans-serif;
+  cursor: pointer;
+  user-select: none;
+}
+.chk:hover { color: #fff; border-color: rgba(34, 211, 238, 0.4); }
+.chk.on { color: #cffafe; border-color: rgba(34, 211, 238, 0.45); background: rgba(34, 211, 238, 0.1); }
+.chk input { width: 14px; height: 14px; margin: 0; accent-color: #22d3ee; cursor: pointer; }
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0 8px;
+  flex: 1;
+  overflow: auto;
+}
+.item {
+  display: grid;
+  grid-template-columns: 34px 1fr auto;
+  gap: 9px;
+  align-items: center;
+  padding: 7px 7px;
+  border-radius: 9px;
+  border: 1px solid transparent;
+}
+.item:hover { background: var(--panel); border-color: var(--line); }
+.item { cursor: pointer; }
+.badge {
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 7px;
+  font: 10px/1 ui-monospace, monospace;
+  text-transform: uppercase;
+  background: rgba(34, 211, 238, 0.14);
+  color: #a5f3fc;
+  border: 1px solid rgba(34, 211, 238, 0.25);
+}
+/* holograma do esqueleto na prévia do item */
+.holo {
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 7px;
+  border: 1px dashed rgba(34, 211, 238, 0.28);
+  background: rgba(8, 8, 15, 0.55);
+  color: #a5f3fc;
+  font: 10px/1 ui-monospace, monospace;
+  text-transform: uppercase;
+  overflow: hidden;
+}
+.holo.on {
+  border-style: solid;
+  border-color: rgba(34, 211, 238, 0.45);
+  background: radial-gradient(60% 70% at 50% 45%, rgba(34, 211, 238, 0.20), rgba(8, 8, 15, 0.92));
+  box-shadow: inset 0 0 12px -6px rgba(34, 211, 238, 0.9);
+}
+.holo svg { width: 100%; height: 100%; display: block; }
+
+.meta { min-width: 0; }
+.name { display: block; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sub { display: block; font-size: 10.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.acts { display: flex; gap: 4px; }
+.mini {
+  width: 25px; height: 25px;
+  border-radius: 7px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 11px;
+}
+.mini:hover { color: #fff; background: rgba(255, 255, 255, 0.09); }
+.empty { margin: auto; text-align: center; color: var(--muted); font-size: 12px; padding: 20px; }
+.empty span { font-size: 11px; opacity: 0.7; }
+.foot {
+  display: flex;
+  gap: 6px;
+  padding: 9px 12px;
+  border-top: 1px solid var(--line);
+  background: rgba(0, 0, 0, 0.25);
+}
+.foot .btn { flex: 0 0 auto; }
+
+/* chegou modelo novo pelo download do site: o painel pisca e o item se destaca */
+@keyframes bp3dPanelFlash {
+  0%, 100% { box-shadow: inset 0 0 0 0 rgba(34, 211, 238, 0); }
+  50% { box-shadow: inset 0 0 0 2px rgba(34, 211, 238, 0.85); }
+}
+body.flash { animation: bp3dPanelFlash 0.62s ease-in-out 4; }
+
+@keyframes bp3dItemHit {
+  0% { background: rgba(34, 211, 238, 0.34); border-color: rgba(34, 211, 238, 0.9); }
+  70% { background: rgba(34, 211, 238, 0.14); border-color: rgba(34, 211, 238, 0.5); }
+  100% { background: transparent; border-color: transparent; }
+}
+.item.hit { animation: bp3dItemHit 2.4s ease-out 1; }

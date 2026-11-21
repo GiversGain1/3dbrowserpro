@@ -1,0 +1,49 @@
+{
+  "manifest_version": 3,
+  "name": "3D Browser Pro",
+  "short_name": "3D Browser Pro",
+  "version": "1.2.0",
+  "description": "Navegue e capture modelos 3D (GLB, glTF, OBJ, FBX, STL, PLY) da rede e da memória do navegador.",
+  "minimum_chrome_version": "111",
+  "permissions": ["downloads", "webRequest", "tabs", "storage"],
+  "host_permissions": ["<all_urls>"],
+  "background": {
+    "service_worker": "src/background.js",
+    "type": "module"
+  },
+  "options_ui": {
+    "page": "src/options/options.html",
+    "open_in_tab": true
+  },
+  "action": {
+    "default_title": "3D Browser Pro",
+    "default_popup": "src/popup/popup.html",
+    "default_icon": {
+      "16": "assets/icon16.png",
+      "32": "assets/icon32.png",
+      "48": "assets/icon48.png",
+      "128": "assets/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "assets/icon16.png",
+    "32": "assets/icon32.png",
+    "48": "assets/icon48.png",
+    "128": "assets/icon128.png"
+  },
+  "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["src/content/hook.js"],
+      "run_at": "document_start",
+      "world": "MAIN",
+      "all_frames": false
+    },
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["src/lib/formats.js", "src/lib/settings.js", "src/content/bridge.js"],
+      "run_at": "document_start",
+      "all_frames": false
+    }
+  ]
+}

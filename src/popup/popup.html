@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>3D Browser Pro</title>
+  <link rel="icon" href="../../assets/icon32.png">
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header class="head">
+    <img class="logo" src="../../assets/icon48.png" alt="3D Browser Pro">
+    <div class="titles">
+      <h1>3D Browser Pro</h1>
+      <p id="site" class="site">capturando modelos 3D</p>
+    </div>
+    <button id="settings" class="icon-btn" title="Configurações">&#9881;</button>
+    <button id="refresh" class="icon-btn" title="Atualizar captura">&#8635;</button>
+  </header>
+
+  <section id="scene" class="scene hidden">
+    <div class="scene-top">
+      <span class="dot"></span>
+      <strong>Cena na memória</strong>
+      <span id="scene-meta" class="muted">—</span>
+    </div>
+    <div class="scene-actions">
+      <button class="btn primary" data-export="glb">Exportar .glb</button>
+      <button class="btn" data-export="obj">Exportar .obj</button>
+    </div>
+    <p id="scene-hint" class="hint"></p>
+  </section>
+
+  <div class="toolbar">
+    <input id="search" type="search" placeholder="Filtrar por nome ou site" autocomplete="off">
+    <button id="download-all" class="btn" title="Baixar tudo o que está na lista">Baixar tudo</button>
+  </div>
+
+  <nav id="filters" class="filters"></nav>
+
+  <main id="list" class="list"></main>
+
+  <div id="empty" class="empty">
+    <p class="empty-title">Nenhum modelo 3D ainda</p>
+    <p class="empty-text">
+      Abra um site com visualizador 3D (Tripo, Sketchfab, model-viewer…),
+      <strong>ative o play</strong> do modelo e volte aqui.
+    </p>
+  </div>
+
+  <footer class="foot">
+    <span id="status" class="muted">—</span>
+    <span class="links">
+      <button id="folder" class="link" title="Abrir a pasta de downloads">pasta</button>
+      <button id="clear" class="link">limpar</button>
+    </span>
+  </footer>
+
+  <script src="popup.js"></script>
+</body>
+</html>

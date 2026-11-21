@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128" role="img" aria-label="3D Browser Pro">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#8b3ff8"/>
+      <stop offset="1" stop-color="#14143f"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.42" r="0.62">
+      <stop offset="0" stop-color="#22d3ee" stop-opacity="0.42"/>
+      <stop offset="1" stop-color="#22d3ee" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="128" height="128" rx="30" fill="url(#bg)"/>
+  <rect width="128" height="128" rx="30" fill="url(#glow)"/>
+
+  <g stroke="#e8fbff" stroke-width="3.4" stroke-linejoin="round" stroke-linecap="round">
+    <path d="M64 20 L102 42 L64 64 L26 42 Z" fill="#c9f9ff"/>
+    <path d="M26 42 L64 64 L64 108 L26 86 Z" fill="#22d3ee"/>
+    <path d="M102 42 L64 64 L64 108 L102 86 Z" fill="#605cf5"/>
+  </g>
+
+  <path d="M77 63 L77 74 M77 74 L70 67 M77 74 L84 67"
+        fill="none" stroke="#ffffff" stroke-width="5"
+        stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

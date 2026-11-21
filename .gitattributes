@@ -1,0 +1,8 @@
+* text=auto
+*.bat text eol=crlf
+*.sh text eol=lf
+*.glb binary
+*.dll binary
+*.wasm binary
+native/ui/vendor/** -text -whitespace
+native/vendor/*.txt -whitespace

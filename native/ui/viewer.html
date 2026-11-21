@@ -1,0 +1,1373 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Visualizador 3D — 3D Browser Pro</title>
+<link rel="stylesheet" href="viewer.css">
+<script>
+/* Ponte com o host + vigia: se o three.js não carregar, avisa em vez de ficar mudo. */
+(function () {
+  'use strict';
+  var host = (window.chrome && window.chrome.webview) || null;
+
+  window.__bp3d = {
+    host: host,
+    send: function (m) {
+      try { if (host) host.postMessage(JSON.stringify(m)); } catch (e) { }
+    },
+    onMsg: function (fn) {
+      if (!host) return;
+      host.addEventListener('message', function (e) {
+        var d = e.data;
+        if (typeof d === 'string') { try { d = JSON.parse(d); } catch (err) { return; } }
+        if (d) fn(d);
+      });
+    }
+  };
+
+  window.__viewerReady = false;
+
+  window.addEventListener('load', function () {
+    setTimeout(function () {
+      if (window.__viewerReady) return;
+      var box = document.getElementById('msg');
+      if (box) {
+        box.className = 'msg err';
+        box.style.display = 'block';
+        box.textContent = 'O visualizador não carregou — sem acesso ao three.js (CDN). Verifique a internet.';
+      }
+      window.__bp3d.send({ type: 'viewer-fail', text: 'visualizador não carregou (three.js indisponível)' });
+    }, 20000);
+  });
+})();
+</script>
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three/build/three.module.js",
+    "three/addons/": "./vendor/three/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+<header id="bar">
+  <span id="title">visualizador 3D</span>
+  <span id="badge" class="badge">—</span>
+  <span class="spacer"></span>
+  <button id="b-side" class="tool on" title="Mostrar/ocultar as ferramentas (F)">ferramentas</button>
+</header>
+
+<div id="main">
+<div id="stage">
+<div id="msg" class="msg">carregando…</div>
+</div>
+
+<aside id="side">
+  <div class="grp">
+    <span class="lbl">modelo</span>
+    <button id="b-grid" class="tool on" title="Grade (G)">grade</button>
+    <button id="b-wire" class="tool" title="Aramado (W)">aramado</button>
+    <button id="b-spin" class="tool on" title="Pausar/retomar a rotação automática da peça (S)">pausar giro</button>
+    <button id="b-reset" class="tool" title="Enquadrar (R)">enquadrar</button>
+  </div>
+
+  <div class="grp">
+    <span class="lbl">esqueleto</span>
+    <button id="b-bones" class="tool" title="Mostrar/editar o esqueleto sobre o modelo (O)">ossos</button>
+    <button id="b-tpose" class="tool" title="Forçar o esqueleto humanoide de 23 ossos em T-pose (T)">T-pose</button>
+    <button id="b-pose" class="tool" title="Alternar T-pose / A-pose (P)">pose: T</button>
+    <button id="b-draw" class="tool" title="Desenhar o esqueleto ponto a ponto (D)">desenhar</button>
+    <button id="b-add" class="tool" title="Adicionar osso/junta: clique no modelo cria um osso filho do selecionado (J)">+ osso / junta</button>
+    <button id="b-move" class="tool" title="Posicionar: arrastar desloca o esqueleto inteiro (M)">posicionar</button>
+    <button id="b-rigreset" class="tool" title="Descarta ajustes e o desenho salvo, e volta ao esqueleto automático">rig automático</button>
+  </div>
+
+  <div class="grp">
+    <span class="lbl">ossos (<span id="rigcount">0</span>)</span>
+    <ul id="riglist" class="riglist"></ul>
+    <input id="rigname" class="tool" type="text" placeholder="nome do osso" disabled>
+    <select id="rigparent" class="tool" title="Pai do osso selecionado" disabled></select>
+    <button id="rigdel" class="tool" disabled>excluir osso</button>
+  </div>
+
+  <div class="grp">
+    <span class="lbl">baixar</span>
+    <select id="fmt" class="tool" title="Formato do download">
+      <option value="original">original</option>
+      <option value="glb">glb + esqueleto</option>
+      <option value="fbx">fbx + esqueleto</option>
+      <option value="obj">obj (geometria)</option>
+      <option value="stl">stl (geometria)</option>
+      <option value="ply">ply (geometria)</option>
+    </select>
+    <button id="b-save" class="tool" title="Baixar o modelo no formato escolhido">baixar ⬇</button>
+    <select id="fbxq" class="tool" title="Qualidade do FBX com esqueleto: menos triângulos = arquivo menor, e o Mixamo/Blender abrem rápido">
+      <option value="0">fbx: original</option>
+      <option value="120000">fbx: 120k tri</option>
+      <option value="60000">fbx: 60k tri</option>
+      <option value="20000">fbx: 20k tri</option>
+      <option value="8000">fbx: 8k tri</option>
+    </select>
+    <button id="b-fbx" class="tool" title="Salvar FBX com o esqueleto atual, na qualidade escolhida">esqueleto + fbx</button>
+    <button id="b-zip" class="tool" title="Salvar um .zip com o FBX e o modelo original juntos">esqueleto + fbx (.zip)</button>
+  </div>
+</aside>
+</div>
+
+<div id="tip" class="tip"></div>
+<div id="foot"><span id="stats">—</span><span class="hint">arraste para girar · roda para zoom · arraste uma junta para mover · Shift+arraste gira a cadeia · F mostra/oculta as ferramentas</span></div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
+import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
+import { STLLoader } from 'three/addons/loaders/STLLoader.js';
+import { PLYLoader } from 'three/addons/loaders/PLYLoader.js';
+import { ColladaLoader } from 'three/addons/loaders/ColladaLoader.js';
+import { TDSLoader } from 'three/addons/loaders/TDSLoader.js';
+import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+const $ = (id) => document.getElementById(id);
+const bridge = window.__bp3d;
+const stage = $('stage');
+const msgEl = $('msg');
+
+/* ---------- cena ---------- */
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+stage.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0b0b13);
+
+const camera = new THREE.PerspectiveCamera(45, 1, 0.01, 5000);
+camera.position.set(3, 2, 4);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+
+scene.add(new THREE.HemisphereLight(0xffffff, 0x1f2937, 2.0));
+
+const key = new THREE.DirectionalLight(0xffffff, 2.2);
+key.position.set(4, 8, 6);
+scene.add(key);
+
+const fill = new THREE.DirectionalLight(0x88aaff, 0.9);
+fill.position.set(-6, -3, -5);
+scene.add(fill);
+
+const rim = new THREE.DirectionalLight(0xc084fc, 1.0);
+rim.position.set(-3, 5, -8);
+scene.add(rim);
+
+/* reflexos/ambiente para materiais PBR (deixa o modelo com cara de loja, não de massa cinza) */
+try {
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+} catch (e) { /* sem ambiente, segue com as luzes */ }
+
+/* GLTFLoader com Draco e Meshopt: é o que Tripo, Meshy, Sketchfab e afins usam */
+const draco = new DRACOLoader();
+draco.setDecoderPath('./vendor/three/examples/jsm/libs/draco/gltf/');
+const gltfLoader = new GLTFLoader();
+gltfLoader.setDRACOLoader(draco);
+try { gltfLoader.setMeshoptDecoder(MeshoptDecoder); } catch (e) { /* sem meshopt */ }
+
+const colladaLoader = new ColladaLoader();
+const tdsLoader = new TDSLoader();
+
+let grid = null;
+let model = null;
+let spin = true;
+let wire = false;
+let showGrid = true;
+
+const state = { name: '', format: '', url: '', meshes: 0, triangles: 0, vertices: 0, error: '' };
+
+function resize() {
+  const w = stage.clientWidth || 1;
+  const h = stage.clientHeight || 1;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+new ResizeObserver(resize).observe(stage);
+
+let frames = 0;
+
+function tick() {
+  requestAnimationFrame(tick);
+  frames++;
+  if (model && spin && !controls.dragging) model.rotation.y += 0.004;
+  controls.update();
+  renderer.render(scene, camera);
+}
+
+/* ---------- interface ---------- */
+
+function show(text, isError) {
+  if (!text) { msgEl.style.display = 'none'; return; }
+  msgEl.style.display = 'block';
+  msgEl.className = 'msg' + (isError ? ' err' : '');
+  msgEl.textContent = text;
+}
+
+function fail(text) {
+  state.error = text || 'falhou';
+  show(state.error, true);
+  $('stats').textContent = '—';
+  bridge.send({ type: 'viewer-fail', text: state.error });
+}
+
+function applyWire() {
+  if (!model) return;
+  model.traverse((o) => {
+    if (!o.isMesh || !o.material) return;
+    const mats = Array.isArray(o.material) ? o.material : [o.material];
+    mats.forEach((m) => { if ('wireframe' in m) m.wireframe = wire; });
+  });
+}
+
+/* ---------- carga ---------- */
+
+function clearModel() {
+  if (model) {
+    scene.remove(model);
+    model.traverse((o) => {
+      if (o.geometry) o.geometry.dispose();
+      if (!o.material) return;
+      const mats = Array.isArray(o.material) ? o.material : [o.material];
+      mats.forEach((m) => {
+        if (m && m.map) m.map.dispose();
+        if (m) m.dispose();
+      });
+    });
+    model = null;
+  }
+  if (grid) {
+    scene.remove(grid);
+    grid.geometry.dispose();
+    grid.material.dispose();
+    grid = null;
+  }
+
+  rigBones = null;
+  clearRig();
+}
+
+/* ---------- esqueleto gerado (prévia do rig sobre o modelo) ---------- */
+
+let rigBones = null;
+let rigGroup = null;
+let rigPoints = null;
+let rigPts = null;
+let rigLines = null;
+let rigSel = null;
+let selectedBone = -1;
+let dragState = null;
+let rigStep = 0.01;
+let rigBase = null;          // posições originais recebidas do app (T-pose)
+let poseMode = 't';
+let tipThreshold = 0.05;
+let noteTimer = 0;
+
+const tipEl = $('tip');
+const ray = new THREE.Raycaster();
+const ndc = new THREE.Vector2();
+
+function boneLabel(name) {
+  return String(name || '').replace(/^mixamorig:/, '');
+}
+
+function showTip(text, x, y) {
+  if (!tipEl) return;
+  tipEl.textContent = text;
+  tipEl.classList.add('on');
+
+  const pad = 14;
+  const box = tipEl.getBoundingClientRect();
+  let tx = x + pad;
+  let ty = y - box.height - 10;
+  if (tx + box.width > window.innerWidth - 6) tx = x - box.width - pad;
+  if (tx < 6) tx = 6;
+  if (ty < 6) ty = y + pad;
+  if (ty + box.height > window.innerHeight - 6) ty = window.innerHeight - box.height - 6;
+
+  tipEl.style.left = Math.round(tx) + 'px';
+  tipEl.style.top = Math.round(ty) + 'px';
+}
+
+function hideTip() {
+  if (tipEl) tipEl.classList.remove('on');
+}
+
+/* qual osso está sob o cursor (raio nos pontos das juntas) */
+function pickBone(clientX, clientY) {
+  if (!rigGroup || !rigPoints || !rigBones || !rigBones.length) return null;
+
+  const rect = renderer.domElement.getBoundingClientRect();
+  ndc.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+  ndc.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+
+  ray.setFromCamera(ndc, camera);
+  ray.params.Points.threshold = tipThreshold;
+
+  const hits = ray.intersectObject(rigPoints, false);
+  if (!hits.length || hits[0].index === undefined) return null;
+
+  const bone = rigBones[hits[0].index];
+  if (!bone) return null;
+  return { index: hits[0].index, name: boneLabel(bone.name) };
+}
+
+/* ---------- edição do esqueleto: arrastar juntas ---------- */
+
+function descendantsOf(index) {
+  const list = [index];
+  for (let i = 0; i < list.length; i++) {
+    for (let j = 0; j < rigBones.length; j++) {
+      if (rigBones[j].parent === list[i] && list.indexOf(j) < 0) list.push(j);
+    }
+  }
+  return list;
+}
+
+function selectBone(index) {
+  selectedBone = index;
+  if (!rigGroup || !rigBones || !rigBones[index]) return;
+
+  if (!rigSel) {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0], 3));
+    rigSel = new THREE.Points(g, new THREE.PointsMaterial({
+      color: 0xfbbf24,
+      size: tipThreshold * 2.2,
+      sizeAttenuation: true,
+      depthTest: false
+    }));
+    rigSel.renderOrder = 1001;
+    rigGroup.add(rigSel);
+  }
+
+  moveSelDot();
+  syncRigControls();
+  note(boneLabel(rigBones[index].name), 1300);
+}
+
+function moveSelDot() {
+  if (!rigSel) return;
+  const b = rigBones && rigBones[selectedBone];
+  if (!b) { rigSel.visible = false; return; }
+  rigSel.visible = true;
+  rigSel.geometry.setAttribute('position', new THREE.Float32BufferAttribute([b.x, b.y, b.z], 3));
+  rigSel.geometry.computeBoundingSphere();
+}
+
+function updateRigGeometry() {
+  if (!rigGroup || !rigBones || !rigPts || !rigLines) return;
+
+  const segs = [];
+  const joints = [];
+  for (let i = 0; i < rigBones.length; i++) {
+    const b = rigBones[i];
+    joints.push(b.x, b.y, b.z);
+    const p = b.parent >= 0 ? rigBones[b.parent] : null;
+    if (p) segs.push(p.x, p.y, p.z, b.x, b.y, b.z);
+  }
+
+  rigLines.geometry.setAttribute('position', new THREE.Float32BufferAttribute(segs, 3));
+  rigPts.geometry.setAttribute('position', new THREE.Float32BufferAttribute(joints, 3));
+  rigLines.geometry.computeBoundingSphere();
+  rigPts.geometry.computeBoundingSphere();
+  moveSelDot();
+}
+
+function aimRay(clientX, clientY) {
+  const rect = renderer.domElement.getBoundingClientRect();
+  ndc.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+  ndc.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+  ray.setFromCamera(ndc, camera);
+}
+
+function startDrag(hit, ev) {
+  aimRay(ev.clientX, ev.clientY);
+
+  const bone = rigBones[hit.index];
+  const aim = new THREE.Vector3(bone.x, bone.y, bone.z);
+  rigGroup.localToWorld(aim);
+
+  const plane = new THREE.Plane();
+  plane.setFromNormalAndCoplanarPoint(camera.getWorldDirection(new THREE.Vector3()).negate(), aim);
+
+  const point = new THREE.Vector3();
+  if (!ray.ray.intersectPlane(plane, point)) return false;
+
+  const drag = {
+    index: hit.index,
+    mode: ev.shiftKey ? 'rotate' : 'move',
+    plane: plane,
+    start: rigGroup.worldToLocal(point.clone()),
+    base: rigBones.map((b) => ({ x: b.x, y: b.y, z: b.z })),
+    move: moveAll && rigBones.length ? rigBones.map((b, i) => i) : descendantsOf(hit.index)
+  };
+
+  /* Shift: gira a cadeia em volta da junta do pai (pose) em vez de deslocar */
+  if (drag.mode === 'rotate') {
+    const pivot = new THREE.Vector3(aim.x, aim.y, aim.z);
+    if (bone.parent >= 0 && rigBones[bone.parent]) {
+      pivot.set(rigBones[bone.parent].x, rigBones[bone.parent].y, rigBones[bone.parent].z);
+      rigGroup.localToWorld(pivot);
+    }
+    drag.pivotWorld = pivot;
+    drag.pivotLocal = rigGroup.worldToLocal(pivot.clone());
+    drag.startVec = point.clone().sub(pivot);
+  }
+
+  dragState = drag;
+
+  controls.enabled = false;
+  selectBone(hit.index);
+  if (drag.mode === 'rotate') note('girando ' + boneLabel(bone.name) + ' (Shift)', 1800);
+  return true;
+}
+
+function moveDrag(ev) {
+  if (!dragState) return;
+
+  aimRay(ev.clientX, ev.clientY);
+  const point = new THREE.Vector3();
+  if (!ray.ray.intersectPlane(dragState.plane, point)) return;
+
+  if (dragState.mode === 'rotate') {
+    const vec = point.clone().sub(dragState.pivotWorld);
+    if (vec.lengthSq() < 1e-10 || dragState.startVec.lengthSq() < 1e-10) return;
+
+    const right = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 0);
+    const up = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 1);
+    const ang = (v) => Math.atan2(v.dot(up), v.dot(right));
+    const delta = ang(vec) - ang(dragState.startVec);
+
+    const invQ = rigGroup.getWorldQuaternion(new THREE.Quaternion()).invert();
+    const axis = camera.getWorldDirection(new THREE.Vector3()).negate().applyQuaternion(invQ).normalize();
+    const q = new THREE.Quaternion().setFromAxisAngle(axis, delta);
+
+    const v = new THREE.Vector3();
+    for (let i = 0; i < dragState.move.length; i++) {
+      const b = dragState.move[i];
+      v.set(dragState.base[b].x, dragState.base[b].y, dragState.base[b].z)
+        .sub(dragState.pivotLocal).applyQuaternion(q).add(dragState.pivotLocal);
+      rigBones[b].x = v.x;
+      rigBones[b].y = v.y;
+      rigBones[b].z = v.z;
+    }
+
+    updateRigGeometry();
+    return;
+  }
+
+  const local = rigGroup.worldToLocal(point.clone());
+  const dx = local.x - dragState.start.x;
+  const dy = local.y - dragState.start.y;
+  const dz = local.z - dragState.start.z;
+
+  for (let i = 0; i < dragState.move.length; i++) {
+    const b = dragState.move[i];
+    rigBones[b].x = dragState.base[b].x + dx;
+    rigBones[b].y = dragState.base[b].y + dy;
+    rigBones[b].z = dragState.base[b].z + dz;
+  }
+
+  updateRigGeometry();
+}
+
+function sendRigEdit(drawn) {
+  if (!rigBones) return;
+  bridge.send({
+    type: 'rig-edit',
+    drawn: !!drawn,
+    bones: rigBones.map((b) => ({ name: b.name, parent: b.parent, x: b.x, y: b.y, z: b.z }))
+  });
+}
+
+/* ---------- desenhar o esqueleto ponto a ponto (vai para o cache e para o download) ---------- */
+
+let drawing = false;
+let drawParent = -1;
+let moveAll = false;      // arrastar move o rig inteiro
+let adding = false;       // próximo clique cria uma junta
+
+function ensureDrawRig() {
+  if (!rigBones) rigBones = [];
+  if (rigGroup || !model) return;
+
+  const box = new THREE.Box3().setFromObject(model);
+  const size = box.getSize(new THREE.Vector3());
+  const maxDim = Math.max(size.x, size.y, size.z) || 1;
+
+  tipThreshold = maxDim * 0.02;
+  rigStep = maxDim * 0.01;
+  rigGroup = buildRig(rigBones, maxDim * 0.012);
+  model.add(rigGroup);
+  rigGroup.updateMatrixWorld(true);
+
+  const b = $('b-bones');
+  if (b) b.classList.add('on');
+}
+
+/* ponto onde o clique bate no modelo */
+function surfacePoint(clientX, clientY) {
+  if (!model) return null;
+  aimRay(clientX, clientY);
+
+  const hits = ray.intersectObject(model, true);
+  for (let i = 0; i < hits.length; i++) {
+    if (hits[i].object && hits[i].object.isMesh && hits[i].point) return hits[i].point;
+  }
+  return null;
+}
+
+/* um modo de edição por vez: desenhar, + junta ou posicionar */
+function setMode(kind) {
+  drawing = kind === 'draw';
+  adding = kind === 'add';
+  moveAll = kind === 'move';
+
+  $('b-draw').classList.toggle('on', drawing);
+  $('b-add').classList.toggle('on', adding);
+  $('b-move').classList.toggle('on', moveAll);
+}
+
+function startDraw() {
+  const on = !drawing;
+  setMode(on ? 'draw' : 'none');
+  drawParent = -1;
+
+  if (on) {
+    dragState = null;
+    controls.enabled = true;
+    note('desenho: clique no modelo para marcar as juntas · clique numa junta para ramificar · Backspace apaga', 4200);
+    return;
+  }
+
+  note('esqueleto desenhado: ' + (rigBones ? rigBones.length : 0) + ' osso(s) · salvo no cache', 2800);
+  if (rigBones && rigBones.length) sendRigEdit(true);
+}
+
+function undoDraw() {
+  if (!rigBones || !rigBones.length) return;
+
+  rigBones.pop();
+  updateRigGeometry();
+  selectedBone = rigBones.length - 1;
+  renderRigList();
+  sendRigEdit(true);
+  note('osso apagado · ' + rigBones.length + ' no desenho', 1400);
+}
+
+/* novo osso no ponto clicado do modelo, pendurado em parent */
+function addJoint(parent, point) {
+  ensureDrawRig();
+
+  const local = rigGroup.worldToLocal(point.clone());
+
+  rigBones.push({
+    name: 'Osso' + (rigBones.length + 1),
+    parent: parent,
+    x: local.x,
+    y: local.y,
+    z: local.z
+  });
+
+  updateRigGeometry();
+  selectBone(rigBones.length - 1);
+  renderRigList();
+  sendRigEdit(true);
+}
+
+/* ---------- lista de ossos: selecionar, renomear, excluir, trocar o pai ---------- */
+
+function renderRigList() {
+  const list = $('riglist');
+  if (!list) return;
+
+  const n = rigBones ? rigBones.length : 0;
+  $('rigcount').textContent = n;
+  list.innerHTML = '';
+
+  for (let i = 0; i < n; i++) {
+    const bone = rigBones[i];
+    const li = document.createElement('li');
+    li.textContent = boneLabel(bone.name);
+    li.title = bone.name + (bone.parent >= 0 && rigBones[bone.parent]
+      ? ' · pai: ' + boneLabel(rigBones[bone.parent].name)
+      : ' · raiz');
+    if (i === selectedBone) li.className = 'on';
+    li.onclick = () => selectBone(i);
+    list.appendChild(li);
+  }
+
+  syncRigControls();
+}
+
+/* nome e pai do osso selecionado (o pai não pode ser um descendente) */
+function syncRigControls() {
+  const name = $('rigname');
+  const parent = $('rigparent');
+  const del = $('rigdel');
+  if (!name || !parent || !del) return;
+
+  const list = $('riglist');
+  if (list) Array.prototype.forEach.call(list.children, (li, i) => li.classList.toggle('on', i === selectedBone));
+
+  const bone = rigBones ? rigBones[selectedBone] : null;
+  name.disabled = parent.disabled = del.disabled = !bone;
+  name.value = bone ? bone.name : '';
+
+  parent.innerHTML = '';
+  const none = document.createElement('option');
+  none.value = '-1';
+  none.textContent = '(sem pai)';
+  parent.appendChild(none);
+
+  if (!bone) return;
+
+  const banned = descendantsOf(selectedBone);
+  for (let i = 0; i < rigBones.length; i++) {
+    if (banned.indexOf(i) >= 0) continue;
+    const o = document.createElement('option');
+    o.value = String(i);
+    o.textContent = boneLabel(rigBones[i].name);
+    parent.appendChild(o);
+  }
+
+  parent.value = String(bone.parent);
+}
+
+function renameBone(index, value) {
+  const clean = String(value || '').trim();
+  if (!rigBones || !rigBones[index] || !clean || rigBones[index].name === clean) return;
+
+  rigBones[index].name = clean;
+  renderRigList();
+  sendRigEdit(true);
+}
+
+function setBoneParent(index, parent) {
+  if (!rigBones || !rigBones[index]) return;
+
+  if (parent >= 0 && descendantsOf(index).indexOf(parent) >= 0) {
+    note('não dá: esse osso é descendente dele (criaria um ciclo)', 2400);
+    syncRigControls();
+    return;
+  }
+
+  rigBones[index].parent = parent;
+  updateRigGeometry();
+  renderRigList();
+  sendRigEdit(true);
+}
+
+function deleteBone(index) {
+  if (!rigBones || !rigBones[index]) return;
+
+  const gone = rigBones[index];
+  const next = gone.parent < 0 ? -1 : (gone.parent > index ? gone.parent - 1 : gone.parent);
+
+  rigBones.splice(index, 1);
+
+  for (let i = 0; i < rigBones.length; i++) {
+    const p = rigBones[i].parent;
+    if (p === index) rigBones[i].parent = next;
+    else if (p > index) rigBones[i].parent = p - 1;
+  }
+
+  selectedBone = -1;
+  updateRigGeometry();
+  renderRigList();
+  sendRigEdit(true);
+  note('osso removido · ' + rigBones.length + ' no esqueleto', 1800);
+}
+
+function endDrag() {
+  if (!dragState) return;
+
+  const index = dragState.index;
+  const rotated = dragState.mode === 'rotate';
+  const label = boneLabel(rigBones[index] ? rigBones[index].name : '');
+  dragState = null;
+  controls.enabled = true;
+
+  sendRigEdit();
+  note('osso ' + label + (rotated ? ' girado' : ' ajustado') + ' · salve o FBX para gravar', 2600);
+}
+
+/* ajuste fino: setas movem o osso selecionado (Alt = passo maior) */
+function nudgeSelected(dx, dy, dz) {
+  if (!rigGroup || !rigBones || !rigBones.length) return;
+
+  const index = selectedBone >= 0 ? selectedBone : 0;
+  const move = descendantsOf(index);
+
+  for (let i = 0; i < move.length; i++) {
+    rigBones[move[i]].x += dx;
+    rigBones[move[i]].y += dy;
+    rigBones[move[i]].z += dz;
+  }
+
+  updateRigGeometry();
+  if (selectedBone < 0) selectBone(0);
+  sendRigEdit();
+  note(boneLabel(rigBones[index].name) + ' ajustado', 1400);
+}
+
+/* ---------- pose: volta ao rig original ou deixa em A-pose ---------- */
+
+function restoreRigBase() {
+  if (!rigBones || !rigBase) return false;
+  for (let i = 0; i < rigBones.length; i++) {
+    const b = rigBase[i];
+    if (!b) continue;
+    rigBones[i].x = b.x;
+    rigBones[i].y = b.y;
+    rigBones[i].z = b.z;
+  }
+  updateRigGeometry();
+  return true;
+}
+
+function boneIndexByName(name) {
+  if (!rigBones) return -1;
+  for (let i = 0; i < rigBones.length; i++) if (boneLabel(rigBones[i].name) === name) return i;
+  return -1;
+}
+
+/* gira a cadeia a partir do osso (inclusive) em volta da junta do pai, no plano XY */
+function rotateChainOf(index, angle) {
+  if (!rigBones || index < 0) return;
+  const b = rigBones[index];
+  const p = b.parent >= 0 && rigBones[b.parent] ? rigBones[b.parent] : b;
+  const pivot = new THREE.Vector3(p.x, p.y, p.z);
+  const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), angle);
+  const chain = descendantsOf(index);
+  const v = new THREE.Vector3();
+
+  for (let i = 0; i < chain.length; i++) {
+    const bi = rigBones[chain[i]];
+    v.set(bi.x, bi.y, bi.z).sub(pivot).applyQuaternion(q).add(pivot);
+    bi.x = v.x;
+    bi.y = v.y;
+    bi.z = v.z;
+  }
+}
+
+function applyPose(kind) {
+  if (!rigBones || !rigBase) { note('sem esqueleto para posar', 1600); return; }
+
+  restoreRigBase();
+  poseMode = kind === 'a' ? 'a' : 't';
+
+  if (poseMode === 'a') {
+    rotateChainOf(boneIndexByName('LeftArm'), -Math.PI / 4);
+    rotateChainOf(boneIndexByName('RightArm'), Math.PI / 4);
+  }
+
+  updateRigGeometry();
+  sendRigEdit();
+
+  const btn = $('b-pose');
+  if (btn) btn.textContent = 'pose: ' + (poseMode === 'a' ? 'A' : 'T');
+
+  note(poseMode === 'a'
+    ? 'A-pose: braços ~45° abaixo · vai para o FBX'
+    : 'T-pose: esqueleto original restaurado', 2600);
+}
+
+function note(text, ms) {
+  show(text);
+  clearTimeout(noteTimer);
+  noteTimer = setTimeout(() => show(''), ms || 2200);
+}
+
+function clearRig() {
+  if (rigGroup) {
+    rigGroup.traverse((o) => {
+      if (o.geometry) o.geometry.dispose();
+      if (o.material) o.material.dispose();
+    });
+    if (rigGroup.parent) rigGroup.parent.remove(rigGroup);
+    else scene.remove(rigGroup);
+    rigGroup = null;
+  }
+  rigPoints = null;
+  rigPts = null;
+  rigLines = null;
+  rigSel = null;
+  selectedBone = -1;
+  hideTip();
+  renderRigList();
+
+  const btn = $('b-bones');
+  if (btn) btn.classList.remove('on');
+}
+
+function buildRig(bones, jointSize) {
+  const segs = [];
+  const joints = [];
+
+  for (let i = 0; i < bones.length; i++) {
+    const b = bones[i];
+    joints.push(b.x, b.y, b.z);
+    const p = b.parent >= 0 ? bones[b.parent] : null;
+    if (p) segs.push(p.x, p.y, p.z, b.x, b.y, b.z);
+  }
+
+  const g = new THREE.Group();
+  g.name = 'rig';
+
+  const lineGeo = new THREE.BufferGeometry();
+  lineGeo.setAttribute('position', new THREE.Float32BufferAttribute(segs, 3));
+  const lines = new THREE.LineSegments(
+    lineGeo,
+    new THREE.LineBasicMaterial({ color: 0x34d399, depthTest: false, transparent: true, opacity: 0.95 })
+  );
+  lines.renderOrder = 999;
+  g.add(lines);
+  rigLines = lines;
+
+  const jGeo = new THREE.BufferGeometry();
+  jGeo.setAttribute('position', new THREE.Float32BufferAttribute(joints, 3));
+  const pts = new THREE.Points(
+    jGeo,
+    new THREE.PointsMaterial({ color: 0xd1fae5, size: jointSize, sizeAttenuation: true, depthTest: false })
+  );
+  pts.renderOrder = 1000;
+  g.add(pts);
+  rigPoints = pts;
+  rigPts = pts;
+
+  return g;
+}
+
+function drawRig() {
+  if (!model || !rigBones || !rigBones.length) return false;
+
+  clearRig();
+
+  const box = new THREE.Box3().setFromObject(model);
+  const size = box.getSize(new THREE.Vector3());
+  const maxDim = Math.max(size.x, size.y, size.z) || 1;
+
+  tipThreshold = maxDim * 0.02;    // raio de acerto do mouse em volta da junta
+  rigStep = maxDim * 0.01;         // passo das setas ao ajustar o osso selecionado
+  rigGroup = buildRig(rigBones, maxDim * 0.012);
+  model.add(rigGroup);          // junto do modelo: acompanha o enquadramento
+  rigGroup.updateMatrixWorld(true);
+
+  $('b-bones').classList.add('on');
+  return true;
+}
+
+function onRig(d) {
+  if (d.note) note(d.note, 3200);
+  if (!d.bones || !d.bones.length) return;
+
+  rigBones = d.bones;
+  rigBase = d.bones.map((b) => ({ name: b.name, parent: b.parent, x: b.x, y: b.y, z: b.z }));
+  poseMode = 't';
+  selectedBone = -1;
+
+  if (drawRig()) {
+    renderRigList();
+    selectBone(0);           // raiz já selecionada: setas ajustam ela de cara
+    note('esqueleto: ' + rigBones.length + ' ossos · arraste uma junta ou use as setas', 3200);
+    bridge.send({ type: 'rig-done', bones: rigBones.length });
+  }
+}
+
+function frame(object) {
+  object.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(object);
+  const size = new THREE.Vector3();
+  const center = new THREE.Vector3();
+  box.getSize(size);
+  box.getCenter(center);
+
+  object.position.sub(center);
+  object.updateMatrixWorld(true);
+
+  const maxDim = Math.max(size.x, size.y, size.z) || 1;
+
+  if (showGrid) {
+    const gsize = Math.max(maxDim * 2.2, 1);
+    grid = new THREE.GridHelper(gsize, 20, 0x7c3aed, 0x243044);
+    grid.position.y = -(size.y / 2) - maxDim * 0.002;
+    scene.add(grid);
+  }
+
+  const dist = (maxDim / (2 * Math.tan((camera.fov * Math.PI / 180) / 2))) * 1.7;
+  camera.position.set(dist * 0.7, dist * 0.45, dist * 0.9);
+  camera.near = Math.max(maxDim / 2000, 0.001);
+  camera.far = Math.max(maxDim * 200, 100);
+  camera.updateProjectionMatrix();
+  controls.target.set(0, 0, 0);
+  controls.update();
+}
+
+function stats(object) {
+  let meshes = 0, tris = 0, verts = 0;
+  object.traverse((o) => {
+    if (!o.isMesh || !o.geometry) return;
+    meshes++;
+    const g = o.geometry;
+    const pos = g.attributes ? g.attributes.position : null;
+    if (pos) verts += pos.count;
+    if (g.index) tris += g.index.count / 3;
+    else if (pos) tris += pos.count / 3;
+  });
+
+  state.meshes = meshes;
+  state.triangles = Math.round(tris);
+  state.vertices = verts;
+  return { meshes: meshes, triangles: state.triangles, vertices: verts };
+}
+
+function parseModel(name, format, data, url) {
+  return new Promise((resolve, reject) => {
+    clearModel();
+    state.name = name || 'modelo';
+    state.format = format || '';
+    state.url = url || '';
+    state.error = '';
+
+    /* base para .gltf que referencia .bin/texturas ao lado */
+    const basePath = state.url ? state.url.replace(/[?#].*$/, '').replace(/[^/]*$/, '') : '';
+
+
+    $('title').textContent = state.name;
+    $('badge').textContent = (format || '?').toUpperCase();
+    show('lendo o modelo…');
+
+    const done = (object) => {
+      if (!object) { failed('o arquivo não trouxe geometria'); return; }
+
+      model = object;
+      model.traverse((o) => {
+        if (o.isMesh && !o.material) {
+          o.material = new THREE.MeshStandardMaterial({ color: 0xbfc7d5, metalness: 0.1, roughness: 0.7 });
+        }
+      });
+
+      scene.add(model);
+      const s = stats(model);
+      applyWire();
+      frame(model);
+
+      $('stats').textContent = s.meshes + ' malha(s) · ' + s.triangles.toLocaleString('pt-BR') +
+        ' triângulos · ' + s.vertices.toLocaleString('pt-BR') + ' vértices';
+      show('');
+
+      let skinned = 0, boneCount = 0;
+      model.traverse((o) => {
+        if (!o.isSkinnedMesh) return;
+        skinned++;
+        if (o.skeleton && o.skeleton.bones) boneCount = Math.max(boneCount, o.skeleton.bones.length);
+      });
+
+      bridge.send({ type: 'viewer-info', meshes: s.meshes, triangles: s.triangles, vertices: s.vertices,
+        skinned: skinned, bones: boneCount });
+      resolve(s);
+    };
+
+    const failed = (message) => {
+      let text = message || 'falhou';
+      if (/Unsupported asset|versions >=/i.test(text)) text = 'esse arquivo não é um glTF válido — parece resposta de API capturada por engano. Abra o item .glb ou .fbx da lista.';
+      else if (/Cannot read|undefined is not|not a function/i.test(text)) text = 'o arquivo não é um modelo 3D válido (conteúdo inesperado: ' + text + ')';
+      else if (/KTX2/i.test(text)) text = 'o modelo usa texturas KTX2 — baixe o arquivo e abra num visualizador de desktop';
+      else if (/draco/i.test(text)) text = 'falhou ao descomprimir Draco: ' + text;
+      fail(text);
+      reject(new Error(text));
+    };
+
+    /* resposta de API (config, pixel, challenge) não é modelo: avisa antes de tentar abrir */
+    const size = data && data.byteLength !== undefined ? data.byteLength : 0;
+    if (size > 0 && size < 80) {
+      failed('esse arquivo tem ' + size + ' B — é resposta de API, não um modelo 3D');
+      return;
+    }
+
+    try {
+      switch ((format || '').toLowerCase()) {
+        case 'glb':
+        case 'gltf': {
+          const payload = format === 'gltf' ? new TextDecoder().decode(data) : data;
+          gltfLoader.parse(payload, basePath, (gltf) => done(gltf.scene || (gltf.scenes && gltf.scenes[0])),
+            (e) => failed(e && e.message ? e.message : 'GLTFLoader falhou'));
+          break;
+        }
+        case 'obj':
+          done(new OBJLoader().parse(new TextDecoder().decode(data)));
+          break;
+        case 'fbx':
+          done(new FBXLoader().parse(data, basePath));
+          break;
+        case 'dae': {
+          const res = colladaLoader.parse(new TextDecoder().decode(data), basePath);
+          done(res && res.scene ? res.scene : (res && res.scene === null ? null : res));
+          break;
+        }
+        case '3ds':
+          done(tdsLoader.parse(data));
+          break;
+        case 'stl': {
+          const g = new STLLoader().parse(data);
+          g.computeVertexNormals();
+          done(new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color: 0xc7d2fe, metalness: 0.2, roughness: 0.6 })));
+          break;
+        }
+        case 'ply': {
+          const g = new PLYLoader().parse(data);
+          if (!g.attributes.normal) g.computeVertexNormals();
+          done(new THREE.Mesh(g, new THREE.MeshStandardMaterial({
+            color: 0xc7d2fe, vertexColors: !!g.attributes.color, metalness: 0.2, roughness: 0.6
+          })));
+          break;
+        }
+        default:
+          failed('formato .' + format + ' não pode ser visualizado (glb, gltf, obj, fbx, stl, ply, dae, 3ds)');
+      }
+    } catch (e) {
+      failed(e && e.message ? e.message : String(e));
+    }
+  });
+}
+
+/* ---------- protocolo com o host ---------- */
+
+let chunks = [];
+let meta = null;
+
+function onOpen(d) {
+  meta = d;
+  chunks = [];
+  state.error = '';
+  state.url = d.url || '';
+  $('title').textContent = d.name || 'modelo';
+  $('badge').textContent = (d.format || '?').toUpperCase();
+  show('recebendo ' + (d.name || 'modelo') + '…');
+
+  /* captura de API (JSON de config, pixel, challenge) não é modelo: avisa em vez de tentar abrir */
+  if (d.size > 0 && d.size < 80) {
+    meta.tooSmall = true;
+    fail('esse arquivo tem só ' + d.size + ' B — é resposta de API, não um modelo 3D');
+    return;
+  }
+
+  if (!d.size && d.url) loadFromUrl(d);
+}
+
+function onChunk(d) {
+  if (!d.data) return;
+  const bin = atob(d.data);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  chunks.push(out);
+}
+
+function onEnd() {
+  if (meta && meta.tooSmall) return;
+  if (chunks.length) {
+    let total = 0;
+    for (const c of chunks) total += c.byteLength;
+    const all = new Uint8Array(total);
+    let off = 0;
+    for (const c of chunks) { all.set(c, off); off += c.byteLength; }
+    chunks = [];
+    parseModel(meta.name, (meta.format || '').toLowerCase(), all.buffer, meta.url).catch(() => { });
+    return;
+  }
+  if (meta && meta.url) { loadFromUrl(meta); return; }
+  fail('nenhum dado recebido');
+}
+
+async function loadFromUrl(m) {
+  try {
+    show('baixando modelo da web…');
+    const res = await fetch(m.url, { mode: 'cors' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const buf = await res.arrayBuffer();
+    await parseModel(m.name || 'modelo', (m.format || '').toLowerCase(), buf, m.url);
+  } catch (e) {
+    fail('o site não liberou o acesso direto (CORS). Use "Baixar" no painel. ' + (e && e.message ? e.message : ''));
+  }
+}
+
+/* ---------- controles ---------- */
+
+$('b-grid').onclick = () => {
+  showGrid = !showGrid;
+  $('b-grid').classList.toggle('on', showGrid);
+  if (grid) grid.visible = showGrid;
+};
+
+$('b-wire').onclick = () => {
+  wire = !wire;
+  $('b-wire').classList.toggle('on', wire);
+  applyWire();
+};
+
+function syncSpin() {
+  const b = $('b-spin');
+  if (!b) return;
+  b.textContent = spin ? 'pausar giro' : 'girar';
+  b.classList.toggle('on', spin);
+}
+
+$('b-spin').onclick = () => {
+  spin = !spin;
+  syncSpin();
+  note(spin ? 'rotação da peça ligada' : 'rotação da peça pausada', 1400);
+};
+syncSpin();
+
+$('b-side').onclick = () => {
+  const hidden = $('side').classList.toggle('hide');
+  $('b-side').classList.toggle('on', !hidden);
+};
+
+$('b-reset').onclick = () => { if (model) frame(model); };
+$('b-save').onclick = () => {
+  const sel = $('fmt');
+  bridge.send({ type: 'viewer-save', format: (sel && sel.value) || 'original', tris: Number($('fbxq').value) || 0 });
+};
+$('b-draw').onclick = () => startDraw();
+
+$('b-move').onclick = () => {
+  setMode(moveAll ? 'none' : 'move');
+  note(moveAll ? 'posicionar: arrastar desloca o esqueleto inteiro' : 'arrastar volta a mover só a junta e os filhos', 2200);
+};
+
+$('b-tpose').onclick = () => {
+  setMode('none');
+
+  rigBones = null;
+  rigBase = null;
+  clearRig();
+  bridge.send({ type: 'rig-humanoid' });
+  note('montando o esqueleto humanoide em T-pose…', 2200);
+};
+
+$('b-add').onclick = () => {
+  setMode(adding ? 'none' : 'add');
+  if (!adding) return;
+
+  dragState = null;
+  note('+ osso / junta: clique no modelo para pendurar um osso no selecionado', 3000);
+};
+/* qualidade do FBX: guardada entre os modelos e enviada junto do pedido */
+const fbxq = $('fbxq');
+try { if (localStorage.getItem('bp3d.fbxTris')) fbxq.value = localStorage.getItem('bp3d.fbxTris'); } catch (e) { }
+if (!fbxq.value) fbxq.value = '0';
+fbxq.onchange = () => { try { localStorage.setItem('bp3d.fbxTris', fbxq.value); } catch (e) { } };
+
+$('b-fbx').onclick = () => bridge.send({ type: 'viewer-fbx', tris: Number(fbxq.value) || 0 });
+$('b-zip').onclick = () => bridge.send({ type: 'viewer-fbx', tris: Number(fbxq.value) || 0, zip: 1 });
+
+$('rigname').onchange = (e) => renameBone(selectedBone, e.target.value);
+$('rigparent').onchange = (e) => setBoneParent(selectedBone, Number(e.target.value));
+$('rigdel').onclick = () => deleteBone(selectedBone);
+
+/* clique com modo ativo (desenhar ou + junta): age antes do arrasto de juntas */
+renderer.domElement.addEventListener('pointerdown', (e) => {
+  if (!drawing && !adding) return;
+  if (e.button !== 0) return;
+
+  e.stopPropagation();
+  e.preventDefault();
+
+  /* no desenho, clicar numa junta existente ramifica a partir dela */
+  if (drawing && rigGroup) {
+    const hit = pickBone(e.clientX, e.clientY);
+    if (hit) {
+      drawParent = hit.index;
+      selectBone(hit.index);
+      note('novo osso a partir de ' + boneLabel(rigBones[hit.index].name), 1500);
+      return;
+    }
+  }
+
+  const point = surfacePoint(e.clientX, e.clientY);
+  if (!point) return;
+
+  if (adding) {
+    addJoint(selectedBone >= 0 ? selectedBone : 0, point);
+    note('junta ' + rigBones.length + ' criada · o próximo clique enrosca nela', 1800);
+    return;
+  }
+
+  const parent = drawParent >= 0 && rigBones[drawParent] ? drawParent
+               : (rigBones.length ? rigBones.length - 1 : -1);
+  addJoint(parent, point);
+  drawParent = -1;
+}, true);
+
+renderer.domElement.addEventListener('pointerdown', (e) => {
+  if (drawing) return;
+  if (!rigGroup || e.button !== 0) return;
+  const hit = pickBone(e.clientX, e.clientY);
+  if (!hit) return;
+  e.stopPropagation();
+  e.preventDefault();
+  startDrag(hit, e);
+}, true);
+
+window.addEventListener('pointermove', (e) => { if (dragState) moveDrag(e); });
+window.addEventListener('pointerup', () => { if (dragState) endDrag(); });
+
+renderer.domElement.addEventListener('pointermove', (e) => {
+  if (dragState) return;
+  if (!rigGroup) { hideTip(); return; }
+  const hit = pickBone(e.clientX, e.clientY);
+  if (hit) showTip(hit.name, e.clientX, e.clientY);
+  else hideTip();
+});
+
+renderer.domElement.addEventListener('pointerleave', hideTip);
+
+$('b-rigreset').onclick = () => {
+  rigBones = null;
+  rigBase = null;
+  poseMode = 't';
+  clearRig();
+  const pb = $('b-pose');
+  if (pb) pb.textContent = 'pose: T';
+  bridge.send({ type: 'rig-reset' });
+  note('esqueleto recalculado', 1800);
+};
+
+$('b-pose').onclick = () => applyPose(poseMode === 'a' ? 't' : 'a');
+
+$('b-bones').onclick = () => {
+  if (rigGroup) { clearRig(); note('esqueleto escondido'); return; }
+  if (rigBones) { if (drawRig()) note('esqueleto: ' + rigBones.length + ' ossos', 2400); return; }
+  bridge.send({ type: 'viewer-rig' });
+};
+
+window.addEventListener('keydown', (e) => {
+  const tag = e.target && e.target.tagName;
+  if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+
+  if (e.key === 'r' || e.key === 'R') $('b-reset').onclick();
+  else if (e.key === 'w' || e.key === 'W') $('b-wire').onclick();
+  else if (e.key === 'g' || e.key === 'G') $('b-grid').onclick();
+  else if (e.key === 's' || e.key === 'S') $('b-spin').onclick();
+  else if (e.key === 'o' || e.key === 'O') $('b-bones').onclick();
+  else if (e.key === 'd' || e.key === 'D') $('b-draw').onclick();
+  else if (e.key === 'm' || e.key === 'M') $('b-move').onclick();
+  else if (e.key === 'j' || e.key === 'J') $('b-add').onclick();
+  else if (e.key === 't' || e.key === 'T') $('b-tpose').onclick();
+  else if (e.key === 'f' || e.key === 'F') $('b-side').onclick();
+  else if (drawing && (e.key === 'Backspace' || e.key === 'Delete')) { undoDraw(); e.preventDefault(); }
+  else if (e.key === 'p' || e.key === 'P') { if ($('b-pose').onclick) $('b-pose').onclick(); }
+  else if (rigGroup && /^(Arrow|Page)(Up|Down|Left|Right)$/.test(e.key)) {
+    const step = rigStep * (e.altKey ? 5 : 1);
+    if (e.key === 'ArrowUp') nudgeSelected(0, step, 0);
+    else if (e.key === 'ArrowDown') nudgeSelected(0, -step, 0);
+    else if (e.key === 'ArrowLeft') nudgeSelected(-step, 0, 0);
+    else if (e.key === 'ArrowRight') nudgeSelected(step, 0, 0);
+    else if (e.key === 'PageUp') nudgeSelected(0, 0, step);
+    else nudgeSelected(0, 0, -step);
+    e.preventDefault();
+  }
+});
+
+/* ---------- ganchos de teste (usados fora do host) ---------- */
+
+window.__viewerInfo = () => ({
+  ready: window.__viewerReady,
+  name: state.name,
+  format: state.format,
+  meshes: state.meshes,
+  triangles: state.triangles,
+  vertices: state.vertices,
+  error: state.error,
+  rendered: renderer.info.render.triangles,
+  canvas: renderer.domElement.width + 'x' + renderer.domElement.height
+});
+
+window.__viewerDraw = () => {
+  renderer.render(scene, camera);
+  return { drawn: renderer.info.render.triangles, calls: renderer.info.render.calls, frames: frames };
+};
+
+window.__viewerBones = () => (rigBones || []).map((b) => ({
+  name: b.name,
+  parent: b.parent,
+  x: Math.round(b.x * 10000) / 10000,
+  y: Math.round(b.y * 10000) / 10000,
+  z: Math.round(b.z * 10000) / 10000
+}));
+
+window.__viewerPick = (x, y) => {
+  const hit = pickBone(x, y);
+  return hit ? hit.name : null;
+};
+
+window.__viewerProject = (i) => {
+  if (!rigBones || !rigBones[i]) return null;
+  const b = rigBones[i];
+  const v = new THREE.Vector3(b.x, b.y, b.z);
+  if (rigGroup) rigGroup.localToWorld(v);
+  v.project(camera);
+  const r = renderer.domElement.getBoundingClientRect();
+  return {
+    x: r.left + ((v.x + 1) / 2) * r.width,
+    y: r.top + ((1 - v.y) / 2) * r.height
+  };
+};
+
+window.__viewerTip = () => (tipEl ? { on: tipEl.classList.contains('on'), text: tipEl.textContent } : null);
+
+window.__viewerRig = (bones) => {
+  onRig({ bones: bones });
+  return { drawn: !!rigGroup, bones: rigBones ? rigBones.length : 0 };
+};
+
+window.__viewerFeed = (name, format, base64) => {
+  const bin = atob(base64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return parseModel(name, format, out.buffer);
+};
+
+/* ---------- início ---------- */
+
+resize();
+tick();
+
+bridge.onMsg((d) => {
+  if (!d || !d.type) return;
+  if (d.type === 'viewer-open') onOpen(d);
+  else if (d.type === 'viewer-chunk') onChunk(d);
+  else if (d.type === 'viewer-end') onEnd();
+  else if (d.type === 'rig') onRig(d);
+});
+
+/* erro de script na página vai para o log do app, senão fica invisível */
+window.addEventListener('error', (e) => {
+  bridge.send({ type: 'viewer-fail', text: 'js: ' + (e.message || 'erro') + ' (linha ' + (e.lineno || 0) + ')' });
+});
+
+window.__viewerReady = true;
+bridge.send({ type: 'viewer-ready' });
+</script>
+</body>
+</html>
